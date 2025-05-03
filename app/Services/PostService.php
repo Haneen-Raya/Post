@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Carbon\Carbon;
 use App\Models\Post;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -27,23 +28,21 @@ class PostService{
     {
         Log::info('Attempting to update post via service.', [
             'post_id' => $post->id,
-            'data_keys' => array_keys($data) 
+            'data_keys' => array_keys($data)
         ]);
         try {
             $post->update($data);
             Log::info('Post updated successfully via service.', ['post_id' => $post->id]);
-
             return $post->fresh();
         } catch (\Exception $e) {
             Log::error('Failed to update post via service.', [
                 'post_id' => $post->id,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
             ]);
-
             throw $e;
         }
     }
+
     public function deletePost(Post $post){
         Log::info('Deleting post via service', ['post_id' => $post->id]);
         $post->delete();
