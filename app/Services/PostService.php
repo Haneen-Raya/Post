@@ -2,247 +2,202 @@
 
 namespace App\Services;
 
+
 use App\Models\Post;
-use Exception;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Pagination\LengthAwarePaginator;
+use App\Services\Service;
+use Throwable;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\Services\BaseService;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response as HttpStatus;
-use App\Http\Resources\PostResource;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use RuntimeException;
 
-
-class PostService extends BaseService
+class PostService extends Service
 {
     /**
-     * Retrieve a paginated list of active posts.
+     * Retrieve all posts with pagination.
      *
-     * Fetches posts that have not been soft-deleted, ordered by the latest.
-     * Uses PostResource for formatting the output and handles potential errors.
-     *
-     * @param int $perPage Number of posts to return per page. Defaults to 15.
-     * @return \Illuminate\Http\JsonResponse A JSON response containing the paginated posts or an error message.
+     * @param int $perPage
+     * @return \Illuminate\Pagination\LengthAwarePaginator
      */
-    public function getAllPosts(int $perPage = 15): JsonResponse
+    public function index(int $perPage = 10): LengthAwarePaginator
     {
-        $logContext = ['per_page' => $perPage];
-        Log::info('Fetching all posts from service', $logContext);
+        Log::info('Fetching paginated posts from service.', ['per_page' => $perPage]);
         try {
-            $posts = Post::latest()->paginate($perPage);
-            return $this->resourcePaginated(
-                PostResource::collection($posts),
-                'Posts retrieved successfully.'
-            );
-        } catch (Exception $e) {
-            Log::error('Failed to fetch posts from service.', array_merge($logContext, ['error' => $e->getMessage()]));
-            return $this->errorResponse(
-                'Could not retrieve posts.',
-                HttpStatus::HTTP_INTERNAL_SERVER_ERROR
-            );
+
+            return Post::latest()->paginate($perPage);
+        } catch (Throwable $th) {
+
+            Log::error('Failed to fetch posts.', ['error' => $th->getMessage(), 'trace' => $th->getTraceAsString()]);
+
+            $this->throwExceptionJson();
         }
     }
 
     /**
-     * Retrieve a paginated list of soft-deleted (trashed) posts.
+     * Store a new post.
      *
-     * Fetches only posts that have been soft-deleted, ordered by the latest deletion time.
-     * Uses PostResource for formatting the output and handles potential errors.
-     *
-     * @param int $perPage Number of trashed posts to return per page. Defaults to 15.
-     * @return \Illuminate\Http\JsonResponse A JSON response containing the paginated trashed posts or an error message.
+     * @param array $data
+     * @return Post
      */
-    public function trashed(int $perPage = 15): JsonResponse
+    public function store(array $data): Post
     {
-        $logContext = ['per_page' => $perPage];
-        Log::info('Fetching trashed posts from service', $logContext);
-        try {
-            $trashedPosts = Post::onlyTrashed()->latest('deleted_at')->paginate($perPage);
-            return $this->resourcePaginated(
-                PostResource::collection($trashedPosts),
-                'Trashed posts retrieved successfully.'
-            );
-        } catch (Exception $e) {
-            Log::error('Failed to fetch trashed posts from service.', array_merge($logContext, ['error' => $e->getMessage()]));
-            return $this->errorResponse(
-                'Could not retrieve trashed posts.',
-                HttpStatus::HTTP_INTERNAL_SERVER_ERROR
-            );
-        }
-    }
-
-    /**
-     * Create a new post with the given data.
-     *
-     * Persists a new post record to the database.
-     * Returns the created post formatted by PostResource on success.
-     * Handles potential creation errors.
-     *
-     * @param array $data Validated data for creating the post.
-     * @return \Illuminate\Http\JsonResponse A JSON response containing the created post or an error message.
-     */
-    public function createPost(array $data): JsonResponse
-    {
-        $logContext = ['data_keys' => array_keys($data)];
-        Log::info('Creating new post via service', $logContext);
+        Log::info('Storing new post via service.', ['data_keys' => array_keys($data)]);
         try {
             $post = Post::create($data);
-            Log::info('Post created successfully via service.', ['post_id' => $post->id]);
-            return $this->successResponse(
-                new PostResource($post),
-                'Post created successfully.',
-                HttpStatus::HTTP_CREATED
-            );
-        } catch (Exception $e) {
-            Log::error('Failed to create post via service.', array_merge($logContext, ['error' => $e->getMessage()]));
-            return $this->errorResponse(
-                'Failed to create post.',
+            Log::info('Post stored successfully.', ['post_id' => $post->id]);
+            return $post;
+        } catch (Throwable $th) {
+            Log::error('Failed to store post.', ['error' => $th->getMessage(), 'trace' => $th->getTraceAsString()]);
+
+            $this->throwExceptionJson( );
+        }
+    }
+
+    /**
+     * Update an existing post.
+     *
+     * @param Post $post
+     * @param array $data
+     * @return Post
+     */
+    public function update(Post $post, array $data): Post
+    {
+        $logContext = ['post_id' => $post->id, 'data_keys' => array_keys($data)];
+        Log::info('Updating post via service.', $logContext);
+        try {
+
+            $updated = $post->update($data);
+            if (!$updated) {
+
+                throw new RuntimeException('Post update returned false.');
+            }
+            Log::info('Post updated successfully.', ['post_id' => $post->id]);
+            return $post->refresh();
+        } catch (Throwable $th) {
+            Log::error('Failed to update post.', array_merge($logContext, ['error' => $th->getMessage(), 'trace' => $th->getTraceAsString()]));
+            $this->throwExceptionJson();
+        }
+    }
+
+    /**
+     * Show a specific post.
+     *
+     *
+     * @param Post $post
+     * @return Post
+     */
+    public function show(Post $post): Post
+    {
+        Log::info('Showing post via service.', ['post_id' => $post->id]);
+
+        try {
+
+            return $post;
+        } catch (Throwable $th) {
+
+            Log::error('Failed to show post.', ['post_id' => $post->id ?? null, 'error' => $th->getMessage(), 'trace' => $th->getTraceAsString()]);
+            $this->throwExceptionJson();
+        }
+    }
+
+    /**
+     * Delete a post (soft delete).
+     *
+     * @param Post $post
+     * @return void
+     */
+    public function delete(Post $post): void
+    {
+        $logContext = ['post_id' => $post->id];
+        Log::info('Soft deleting post via service.', $logContext);
+        try {
+
+            $deleted = $post->delete();
+
+            if (!$deleted) {
+                throw new RuntimeException("Post delete method returned false.");
+            }
+            Log::info('Post soft deleted successfully.', $logContext);
+
+        } catch (Throwable $th) {
+            Log::error('Failed to soft delete post.', array_merge($logContext, ['error' => $th->getMessage(), 'trace' => $th->getTraceAsString()]));
+            $this->throwExceptionJson(
+                trans('Failed to delete post.'),
                 HttpStatus::HTTP_INTERNAL_SERVER_ERROR
             );
         }
     }
 
     /**
-     * Retrieve the details of a specific post.
+     * Permanently delete a post.
      *
-     * Takes an existing Post model instance and returns its details formatted by PostResource.
-     * Handles cases where the provided Post model instance might not actually exist in the DB
-     * or other retrieval errors. Throws ModelNotFoundException if the instance doesn't exist.
-     *
-     * @param \App\Models\Post $post The post model instance (usually resolved via Route Model Binding).
-     * @return \Illuminate\Http\JsonResponse A JSON response containing the post details or an error message.
-     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException If the provided Post instance does not exist.
+     * @param Post $post
+     * @return void
      */
-    public function getPost(Post $post): JsonResponse
-    {
-        $logContext = ['post_id' => $post->id ?? 'unknown'];
-        Log::info('Getting/Processing details for existing post object via service', $logContext);
-        try {
-            if (!$post->exists) {
-                 throw new ModelNotFoundException("Post instance provided does not exist.");
-            }
-            return $this->successResponse(new PostResource($post), 'Post retrieved successfully.');
-        } catch (ModelNotFoundException $e) {
-             Log::warning('Post not found in getPost service method.', array_merge($logContext, ['error' => $e->getMessage()]));
-             return $this->errorResponse('Post not found.', HttpStatus::HTTP_NOT_FOUND);
-        } catch (Exception $e) {
-            Log::error('Failed to get/process post details via service.', array_merge($logContext, ['error' => $e->getMessage()]));
-            return $this->errorResponse('Could not retrieve post details.', HttpStatus::HTTP_INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    /**
-     * Update an existing post with the given data.
-     *
-     * Applies updates to the specified Post model instance.
-     * Returns the updated post formatted by PostResource (fetching fresh data).
-     * Handles potential update errors.
-     *
-     * @param \App\Models\Post $post The post model instance to update.
-     * @param array $data Validated data for updating the post.
-     * @return \Illuminate\Http\JsonResponse A JSON response containing the updated post or an error message.
-     */
-    public function updatePost(Post $post, array $data): JsonResponse
-    {
-        $logContext = ['post_id' => $post->id, 'data_keys' => array_keys($data)];
-        Log::info('Attempting to update post via service.', $logContext);
-        try {
-            $post->update($data);
-            Log::info('Post updated successfully or no changes needed.', ['post_id' => $post->id, 'was_changed' => $post->wasChanged()]);
-            return $this->successResponse(new PostResource($post->fresh()), 'Post updated successfully.');
-        } catch (Exception $e) {
-            Log::error('Failed to update post via service.', array_merge($logContext, ['error' => $e->getMessage()]));
-            return $this->errorResponse('Failed to update post.', HttpStatus::HTTP_INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    /**
-     * Soft delete a specific post.
-     *
-     * Marks the specified Post model instance as deleted (sets deleted_at timestamp).
-     * Returns a success response upon successful soft deletion.
-     * Handles potential errors during the deletion process. Throws Exception if delete returns false.
-     *
-     * @param \App\Models\Post $post The post model instance to soft delete.
-     * @return \Illuminate\Http\JsonResponse A JSON response confirming the soft deletion or an error message.
-     * @throws \Exception If the delete operation fails unexpectedly.
-     */
-    public function deletePost(Post $post): JsonResponse
+    public function forceDelete(Post $post): void
     {
         $logContext = ['post_id' => $post->id];
-        Log::info('Deleting post via service', $logContext);
+        Log::warning('Permanently deleting post via service.', $logContext);
         try {
-            $deleted = $post->delete();
-            if (!$deleted) {
-                 throw new Exception("Post delete method returned false.");
-            }
-            Log::info('Post soft deleted successfully via service.', $logContext);
-            return $this->successResponse(null, 'Post soft deleted successfully.');
-        } catch (Exception $e) {
-            Log::error('Failed to delete post via service.', array_merge($logContext, ['error' => $e->getMessage()]));
-            return $this->errorResponse('Failed to delete post.', HttpStatus::HTTP_INTERNAL_SERVER_ERROR);
-        }
-    }
 
-    /**
-     * Restore a soft-deleted post by its ID.
-     *
-     * Finds a trashed post by its ID and removes the soft delete marker.
-     * Returns the restored post formatted by PostResource on success.
-     * Handles ModelNotFoundException if the post isn't found in trash or other restore errors.
-     * Throws Exception if restore returns false.
-     *
-     * @param int|string $id The ID of the post to restore.
-     * @return \Illuminate\Http\JsonResponse A JSON response containing the restored post or an error message.
-     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException If no trashed post with the given ID is found.
-     * @throws \Exception If the restore operation fails unexpectedly.
-     */
-    public function restorePost(int|string $id): JsonResponse
-    {
-        $logContext = ['post_id' => $id];
-        Log::info('Restoring post via service', $logContext);
-        try {
-            $post = Post::withTrashed()->findOrFail($id);
-            $restored = $post->restore();
-             if (!$restored) {
-                 throw new Exception("Post restore method returned false.");
-            }
-            Log::info('Post restored successfully via service.', ['post_id' => $post->id]);
-            return $this->successResponse(new PostResource($post), 'Post restored successfully.');
-        } catch (ModelNotFoundException $e) {
-             Log::warning('Post to restore not found.', array_merge($logContext, ['error' => $e->getMessage()]));
-             return $this->errorResponse('Post not found in trash.', HttpStatus::HTTP_NOT_FOUND);
-        } catch (Exception $e) {
-            Log::error('Failed to restore post via service.', array_merge($logContext, ['error' => $e->getMessage()]));
-            return $this->errorResponse('Failed to restore post.', HttpStatus::HTTP_INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    /**
-     * Permanently delete a post by its ID.
-     *
-     * Finds a post by its ID (including trashed ones) and permanently removes it from the database.
-     * Returns a success response upon successful permanent deletion.
-     * Handles ModelNotFoundException if the post isn't found or other deletion errors.
-     *
-     * @param int|string $id The ID of the post to permanently delete.
-     * @return \Illuminate\Http\JsonResponse A JSON response confirming the permanent deletion or an error message.
-     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException If no post with the given ID is found.
-     */
-    public function forceDeletePost(int|string $id): JsonResponse
-    {
-        $logContext = ['post_id' => $id];
-        Log::warning('Permanently deleting post via service', $logContext);
-        try {
-            $post = Post::withTrashed()->findOrFail($id);
             $post->forceDelete();
-            Log::warning('Post permanently deleted successfully via service.', $logContext);
-             return $this->successResponse(null, 'Post permanently deleted successfully.');
-        } catch (ModelNotFoundException $e) {
-             Log::warning('Post to force delete not found.', array_merge($logContext, ['error' => $e->getMessage()]));
-             return $this->errorResponse('Post not found.', HttpStatus::HTTP_NOT_FOUND);
-        } catch (Exception $e) {
-            Log::error('Failed to permanently delete post via service.', array_merge($logContext, ['error' => $e->getMessage()]));
-             return $this->errorResponse('Failed to permanently delete post.', HttpStatus::HTTP_INTERNAL_SERVER_ERROR);
+            Log::warning('Post permanently deleted successfully.', $logContext);
+
+        } catch (Throwable $th) {
+            Log::error('Failed to permanently delete post.', array_merge($logContext, ['error' => $th->getMessage(), 'trace' => $th->getTraceAsString()]));
+            $this->throwExceptionJson();
+        }
+    }
+
+    /**
+     * Restore a soft deleted post.
+
+     *
+     * @param Post $post
+     * @return void
+     */
+    public function restore(Post $post): void
+    {
+        $logContext = ['post_id' => $post->id];
+        Log::info('Restoring post via service.', $logContext);
+        try {
+
+            if (!$post->trashed()) {
+                 Log::warning('Attempted to restore a post that is not soft-deleted.', $logContext);
+                 $this->throwExceptionJson();
+            }
+
+            $restored = $post->restore();
+
+            if (!$restored) {
+                 throw new RuntimeException("Post restore method returned false.");
+            }
+            Log::info('Post restored successfully.', $logContext);
+
+        } catch (Throwable $th) {
+
+            Log::error('Failed to restore post.', array_merge($logContext, ['error' => $th->getMessage(), 'trace' => $th->getTraceAsString()]));
+            $this->throwExceptionJson();
+        }
+    }
+
+    /**
+     * Get all trashed posts with pagination.
+     *
+     * @param int $perPage
+     * @return \Illuminate\Pagination\LengthAwarePaginator
+     */
+    public function trashed(int $perPage = 10): LengthAwarePaginator
+    {
+        Log::info('Fetching paginated trashed posts from service.', ['per_page' => $perPage]);
+        try {
+
+            return Post::onlyTrashed()->latest('deleted_at')->paginate($perPage);
+        } catch (Throwable $th) {
+            Log::error('Failed to fetch trashed posts.', ['error' => $th->getMessage(), 'trace' => $th->getTraceAsString()]);
+            $this->throwExceptionJson();
         }
     }
 }
