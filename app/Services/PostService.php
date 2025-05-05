@@ -36,7 +36,7 @@ class PostService extends Service
     }
 
     /**
-     * Store a new post.
+     * Creates and stores a new post.
      *
      * @param array $data
      * @return Post

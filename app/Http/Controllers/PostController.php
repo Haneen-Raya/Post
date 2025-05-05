@@ -31,7 +31,7 @@ class PostController extends Controller
     }
 
     /**
-     *
+     *Display a paginated list of active posts.
      * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
@@ -47,7 +47,7 @@ class PostController extends Controller
     }
 
     /**
-     *
+     *Display a paginated list of soft-deleted (trashed) posts.
      * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
@@ -64,7 +64,7 @@ class PostController extends Controller
     }
 
     /**
-     *
+     *Store a newly created post.
      * @param \App\Http\Requests\StorePostRequest $request
      * @return \Illuminate\Http\JsonResponse
      */
@@ -81,7 +81,7 @@ class PostController extends Controller
     }
 
     /**
-     *
+     *Display the specified post.
      * @param \App\Models\Post $post
      * @return \Illuminate\Http\JsonResponse
      */
@@ -96,7 +96,7 @@ class PostController extends Controller
     }
 
     /**
-     *
+     * Update the specified post.
      * @param \App\Http\Requests\UpdatePostRequest $request
      * @param \App\Models\Post $post
      * @return \Illuminate\Http\JsonResponse
@@ -113,7 +113,7 @@ class PostController extends Controller
     }
 
     /**
-     * حذف مقال (حذف مؤقت
+     *Soft delete the specified post.
      * @param \App\Models\Post $post
      * @return \Illuminate\Http\JsonResponse
      */
@@ -129,7 +129,7 @@ class PostController extends Controller
     }
 
     /**
-     *
+     *Restore the specified soft-deleted post.
      * @param int|string $id
      * @return \Illuminate\Http\JsonResponse
      */
@@ -155,7 +155,7 @@ class PostController extends Controller
     }
 
     /**
-     *
+     *Permanently delete the specified post.
      * @param int|string $id
      * @return \Illuminate\Http\JsonResponse
      */
