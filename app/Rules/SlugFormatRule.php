@@ -9,8 +9,11 @@ class SlugFormatRule implements ValidationRule
 {
     /**
      * Run the validation rule.
-     *
-     * @param  \Closure(string, ?string=): \Illuminate\Translation\PotentiallyTranslatedString  $fail
+     * Uses regex to check if the value matches the allowed slug pattern.
+     * @param string $attribute
+     * @param mixed $value
+     * @param \Closure $fail
+     * @return void
      */
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {

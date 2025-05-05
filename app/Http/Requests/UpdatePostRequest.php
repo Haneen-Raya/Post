@@ -17,6 +17,8 @@ class UpdatePostRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
+     * Allows all users to attempt updating a post in this case.
+     * @return bool
      */
     public function authorize(): bool
     {
@@ -25,7 +27,9 @@ class UpdatePostRequest extends FormRequest
     }
 
     /**
-     * Get the validation rules that apply to the request.
+     * Get the validation rules that apply to the request for updating a post.
+     * Uses 'sometimes' to only validate fields that are present in the request.
+     * Ignores the current post's slug for the unique rule.
      *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
      */
@@ -54,7 +58,7 @@ class UpdatePostRequest extends FormRequest
 
             'publish_date'  => [
                 'nullable',
-                'date_format:d-m-Y',
+                'date',
                 new FutureDateRule(),
                 Rule::requiredIf(function () {
                     return $this->has('is_published') && $this->boolean('is_published');
@@ -68,6 +72,13 @@ class UpdatePostRequest extends FormRequest
                 new MaxWordsRule(15)]
         ];
     }
+
+     /**
+      * Get the custom error messages for validator errors during update.
+     * Provides user-friendly feedback for failed validation rules.
+
+      * @return array{body.required: string, is_published.boolean: string, keywords.string: string, meta_description.max: string, publish_date.date: string, publish_date.required_if: string, slug.max: string, slug.required: string, slug.unique: string, title.max: string, title.required: string}
+      */
      public function messages(): array
     {
         return [
@@ -88,8 +99,7 @@ class UpdatePostRequest extends FormRequest
 
     /**
      * Get custom attributes for validator errors.
-     * This defines user-friendly names for fields used in error messages,
-     * replacing the default ':attribute' placeholder.
+     * Defines user-friendly names for fields used in validation error messages.
      *
      * @return array<string, string>
      */
@@ -107,11 +117,17 @@ class UpdatePostRequest extends FormRequest
         ];
     }
 
+    /**
+     * Prepare the data for validation before updating.
+     * Cleans tags, handles boolean casting, manages nullable fields,
+     * and auto-generates slug if only title is updated.
+     * @return void
+     */
     protected function prepareForValidation(): void
     {
         Log::debug('UpdatePostRequest: Preparing data for validation.', $this->all());
 
-        // تنظيف الوسوم
+
         if ($this->filled('tags')) {
             $cleanedTags = preg_replace('/\s*,\s*/', ',', trim($this->tags));
             $cleanedTags = preg_replace('/,{2,}/', ',', $cleanedTags);
@@ -119,7 +135,7 @@ class UpdatePostRequest extends FormRequest
             $this->merge([
                 'tags' => $cleanedTags ?: null
             ]);
-        } else if ($this->has('tags')) { 
+        } else if ($this->has('tags')) {
              $this->merge(['tags' => null]);
         }
 
@@ -151,6 +167,12 @@ class UpdatePostRequest extends FormRequest
 
         Log::debug('UpdatePostRequest: Data after preparation.', $this->all());
     }
+
+    /**
+     *  Handle any tasks that should occur after validation passes for an update.
+     * Logs successful validation attempt with post ID and validated data.
+     * @return void
+     */
     protected function passedValidation(): void
     {
         Log::info('Validation passed for updating post.', [
@@ -160,6 +182,14 @@ class UpdatePostRequest extends FormRequest
         ]);
     }
 
+    /**
+     *  Handle a failed validation attempt during update.
+     * Overrides the default behavior to return a custom JSON response with errors
+     * and a 422 status code. Includes the post ID in the log for context.
+     * @param \Illuminate\Contracts\Validation\Validator $validator
+     * @throws \Illuminate\Http\Exceptions\HttpResponseException
+     * @return never
+     */
     protected function failedValidation(Validator $validator): void
     {
         Log::warning('UpdatePostRequest: Validation failed.', [

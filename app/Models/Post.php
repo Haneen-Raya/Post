@@ -9,6 +9,10 @@ class Post extends Model
 {
     use SoftDeletes;
 
+    /**
+     *
+     * @var array
+     */
     protected $fillable = [
         'title',
         'body',
@@ -22,9 +26,12 @@ class Post extends Model
 
 
 
-
+    /**
+     * 
+     * @var array
+     */
     protected $casts = [
         'is_published' => 'boolean',
-        'publish_date' => 'date:d-m-Y', 
+        'publish_date' => 'date:d-m-Y',
     ];
 }

@@ -15,7 +15,11 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 class StorePostRequest extends FormRequest
 {
     /**
-     * Determine if the user is authorized to make this request.
+     *
+     *  Determine if the user is authorized to make this request.
+     * In this case, allows all users to attempt storing a post.
+
+     * @return bool
      */
     public function authorize(): bool
     {
@@ -24,7 +28,8 @@ class StorePostRequest extends FormRequest
     }
 
     /**
-     * Get the validation rules that apply to the request.
+     *  Get the validation rules that apply to the request for storing a post.
+     * Defines rules for title, slug, body, publication status, dates, and metadata.
      *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
      */
@@ -66,6 +71,11 @@ class StorePostRequest extends FormRequest
         ];
     }
 
+    /**
+     * Get the custom error messages for validator errors.
+     * Provides user-friendly messages for specific validation rules.
+     * @return array{body.required: string, is_published.boolean: string, keywords.string: string, meta_description.max: string, publish_date.date: string, publish_date.required_if: string, slug.max: string, slug.unique: string, title.max: string, title.required: string}
+     */
     public function messages(){
         return[
             'title.required' => 'The title field is required.',
@@ -81,6 +91,11 @@ class StorePostRequest extends FormRequest
         ];
     }
 
+    /**
+     * Get custom attributes for validator errors.
+     * Defines user-friendly names for fields used in validation error messages.
+     * @return array{body: string, is_published: string, keywords: string, meta_description: string, publish_date: string, slug: string, tags: string, title: string}
+     */
     public function attributes(){
         return [
             'title' => 'Title',
@@ -94,6 +109,13 @@ class StorePostRequest extends FormRequest
         ];
     }
 
+    /**
+     * Prepare the data for validation.
+     * Modifies the request data before the validation rules are applied.
+     * E.g., auto-generating slug, cleaning tags, casting boolean, handling empty nullable fields.
+
+     * @return void
+     */
     protected function prepareForValidation(): void
     {
         if ($this->filled('title') && !$this->filled('slug')) {
@@ -117,9 +139,10 @@ class StorePostRequest extends FormRequest
              ]);
         }
 
-         if ($this->has('is_published') && !$this->boolean('is_published')) {
-              $this->merge(['publish_date' => null]);
-         }
+        if ($this->has('is_published') && !$this->boolean('is_published')) {
+            $this->merge(['publish_date' => $this->input('publish_date') ?: null]);
+        }
+
 
          if ($this->input('publish_date') === '') {
              $this->merge(['publish_date' => null]);
@@ -135,6 +158,11 @@ class StorePostRequest extends FormRequest
          }
     }
 
+    /**
+     * Handle any tasks that should occur after validation passes.
+     * Useful for logging or other side effects before the controller action.
+     * @return void
+     */
     protected function passedValidation(): void
     {
         Log::info('StorePostRequest: Validation passed.', [
@@ -142,6 +170,14 @@ class StorePostRequest extends FormRequest
         ]);
     }
 
+    /**
+     * Handle a failed validation attempt.
+     * Overrides the default redirect behavior to return a custom JSON response
+     * with errors and a 422 status code.
+     * @param \Illuminate\Contracts\Validation\Validator $validator
+     * @throws \Illuminate\Http\Exceptions\HttpResponseException
+     * @return never
+     */
     protected function failedValidation(Validator $validator): void
     {
         Log::warning('StorePostRequest: Validation failed.', [

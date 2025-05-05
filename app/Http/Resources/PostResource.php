@@ -8,7 +8,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class PostResource extends JsonResource
 {
     /**
-     * Transform the resource into an array.
+     * 
+     * Defines how the Post model attributes are mapped to the JSON response keys.
      *
      * @return array<string, mixed>
      */
