@@ -2,162 +2,126 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Support\Facades\Log;
 use App\Models\Post;
-use Illuminate\Http\Request;
 use App\Services\PostService;
-use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
-use App\Http\Resources\PostResource;
+use Illuminate\Http\Request;
 use App\Http\Requests\StorePostRequest;
 use App\Http\Requests\UpdatePostRequest;
 
 class PostController extends Controller
 {
-    protected $postService ;
-    public function __construct(PostService $postService){
-        $this->postService = $postService ;
-    }
     /**
-     * Display a listing of the resource.
-     * This method retrieves all posts with pagination and returns them as a JSON response.
-     * @param \Illuminate\Http\Request $request
-     * @return JsonResponse|mixed
+     * The post service instance.
+     *
+     * @var \App\Services\PostService
+     */
+    protected $postService;
+
+    /**
+     * Controller constructor.
+     * Injects the PostService dependency.
+     *
+     * @param \App\Services\PostService $postService The service responsible for post logic.
+     */
+    public function __construct(PostService $postService)
+    {
+        $this->postService = $postService;
+    }
+
+    /**
+     * Display a paginated list of posts.
+     * Retrieves active (not trashed) posts.
+     *
+     * @param \Illuminate\Http\Request $request The incoming request, potentially containing pagination parameters.
+     * @return \Illuminate\Http\JsonResponse JSON response containing the paginated list of posts.
      */
     public function index(Request $request): JsonResponse
     {
-        $posts = $this->postService->getAllPosts($request->input('per_page', 15));
 
-        return $this->jsonResponse(
-            true,
-            'Posts retrieved successfully.',
-            [
-                'data' => PostResource::collection($posts)->response()->getData(true)['data'],
-                'links' => PostResource::collection($posts)->response()->getData(true)['links'],
-                'meta' => PostResource::collection($posts)->response()->getData(true)['meta'],
-            ],
-            Response::HTTP_OK
-        );
+        return $this->postService->getAllPosts($request->query('per_page', 15));
     }
 
     /**
-     * Store a newly created resource in storage.
-     * This method validates the request data and creates a new post, returning it as a JSON response.
-     * @param \App\Http\Requests\StorePostRequest $request
-     * @return JsonResponse|mixed
+     * Display a paginated list of soft-deleted (trashed) posts.
+     *
+     * @param \Illuminate\Http\Request $request The incoming request, potentially containing pagination parameters.
+     * @return \Illuminate\Http\JsonResponse JSON response containing the paginated list of trashed posts.
+     */
+    public function trashed(Request $request): JsonResponse
+    {
+        return $this->postService->trashed($request->query('per_page', 15));
+    }
+
+    /**
+     * Store a newly created post in storage.
+     * Uses StorePostRequest for validation.
+     *
+     * @param \App\Http\Requests\StorePostRequest $request The request object containing validated data for the new post.
+     * @return \Illuminate\Http\JsonResponse JSON response containing the newly created post data.
      */
     public function store(StorePostRequest $request): JsonResponse
     {
-        $validatedData = $request->validated();
-        $post = $this->postService->createPost($validatedData);
-
-        return $this->jsonResponse(
-            true,
-            'Post created successfully.',
-            new PostResource($post),
-            Response::HTTP_CREATED
-        );
+        return $this->postService->createPost($request->validated());
     }
 
     /**
-     *  Display the specified resource.
-     * This method retrieves a specific post by its ID and returns it as a JSON response
-     * @param \App\Models\Post $post
-     * @return JsonResponse|mixed
+     * Display the specified post.
+     * Uses Route Model Binding to find the post.
+     *
+     * @param \App\Models\Post $post The post model instance automatically resolved by Laravel.
+     * @return \Illuminate\Http\JsonResponse JSON response containing the details of the specified post.
      */
     public function show(Post $post): JsonResponse
     {
-        $detailedPost = $this->postService->getPost($post);
-
-        return $this->jsonResponse(
-            true,
-            'Post retrieved successfully.',
-            new PostResource($detailedPost),
-            Response::HTTP_OK
-        );
+        return $this->postService->getPost($post);
     }
 
     /**
-     * Update the specified resource in storage.
-     * This method validates the request data and updates an existing post, returning the updated post as a JSON response.
-     * @param \App\Http\Requests\UpdatePostRequest $request
-     * @param \App\Models\Post $post
-     * @return JsonResponse|mixed
+     * Update the specified post in storage.
+     * Uses UpdatePostRequest for validation and Route Model Binding.
+     *
+     * @param \App\Http\Requests\UpdatePostRequest $request The request object containing validated data for updating the post.
+     * @param \App\Models\Post $post The post model instance to update.
+     * @return \Illuminate\Http\JsonResponse JSON response containing the updated post data.
      */
     public function update(UpdatePostRequest $request, Post $post): JsonResponse
     {
-        $validatedData = $request->validated();
-        $updatedPost = $this->postService->updatePost($post, $validatedData);
-
-        return $this->jsonResponse(
-            true,
-            'Post updated successfully.',
-            new PostResource($updatedPost->fresh()),
-            Response::HTTP_OK
-        );
+        return $this->postService->updatePost($post, $request->validated());
     }
 
     /**
-     * Remove the specified resource from storage.
-     * This method deletes a specific post (soft delete) and returns a success message as a JSON response.
-     * @param \App\Models\Post $post
-     * @return JsonResponse|mixed
+     * Soft delete the specified post.
+     * Uses Route Model Binding to find the post.
+     *
+     * @param \App\Models\Post $post The post model instance to soft delete.
+     * @return \Illuminate\Http\JsonResponse JSON response confirming the soft deletion.
      */
     public function destroy(Post $post): JsonResponse
     {
-        $this->postService->deletePost($post);
-
-        return $this->jsonResponse(
-            true,
-            'Post soft deleted successfully.',
-            null,
-            Response::HTTP_OK
-        );
+        return $this->postService->deletePost($post);
     }
+
     /**
-     * Restore a soft-deleted post.
-     * This method restores a soft-deleted post by its ID and returns the restored post as a JSON response.
-     * @param mixed $id
-     * @return JsonResponse|mixed
+     * Restore a previously soft-deleted post.
+     *
+     * @param int|string $id The ID of the post to restore.
+     * @return \Illuminate\Http\JsonResponse JSON response containing the restored post data.
      */
     public function restore($id): JsonResponse
     {
-        $restoredPost = $this->postService->restorePost($id);
-
-        return $this->jsonResponse(
-            true,
-            'Post restored successfully.',
-            new PostResource($restoredPost),
-            Response::HTTP_OK
-        );
+        return $this->postService->restorePost($id);
     }
 
     /**
-     * Permanently deletes a post by its ID.
-    *
-    * This function attempts to permanently remove a post from the database.
-    * It calls the forceDeletePost method from the postService to perform the deletion.
-     * @param mixed $id
-     * @return JsonResponse|mixed
+     * Permanently delete the specified post from storage.
+     * Finds the post by ID, including trashed ones.
+     *
+     * @param int|string $id The ID of the post to permanently delete.
+     * @return \Illuminate\Http\JsonResponse JSON response confirming the permanent deletion.
      */
-    public function forcedelete($id): JsonResponse
-{
-    $result = $this->postService->forceDeletePost($id);
-
-    if ($result) {
-        return $this->jsonResponse(
-            true,
-            'Post permanently deleted successfully.',
-            null,
-            Response::HTTP_OK
-        );
-    } else {
-        return $this->jsonResponse(
-            false,
-            'Failed to permanently delete post.',
-            null,
-            Response::HTTP_INTERNAL_SERVER_ERROR
-        );
+    public function forceDelete($id): JsonResponse
+    {
+        return $this->postService->forceDeletePost($id);
     }
-}
 }

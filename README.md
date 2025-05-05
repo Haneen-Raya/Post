@@ -85,6 +85,7 @@ This project is a standalone API that can serve as the backend for a Content Man
 | `DELETE`    | `/api/posts/{post}`         | Delete a post (Soft Delete)         | `destroy`         | -                   |
 | `POST`      | `/api/posts/{id}/restore`   | Restore a soft-deleted post         | `restore`         | -                   |
 | `DELETE`    | `/api/posts/{id}/force`     | Permanently delete a post           | `forcedelete`     | -                   |
+| `GET`       | `/api/posts/trashed`        | List soft-deleted (trashed) posts   | `trashed`         | `per_page` (query)  |
 
 *   **Note:** `{post}` can be the post ID. `{id}` in custom routes is the post ID.
 *   The `?per_page=N` query parameter can be used with `GET /api/posts` to specify the number of items per page.

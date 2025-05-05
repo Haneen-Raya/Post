@@ -1,208 +1,157 @@
 <?php
 
+
 namespace App\Http\Requests;
 
-use App\Models\Post;
 use App\Rules\MaxWordsRule;
-use Illuminate\Support\Str;
+// Remove imports now handled by PostRequest if not directly used here
 use App\Rules\FutureDateRule;
 use App\Rules\SlugFormatRule;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Contracts\Validation\Validator;
-use Illuminate\Http\Exceptions\HttpResponseException;
+use App\Models\Post; // Keep model import for route model binding check
+use Illuminate\Contracts\Validation\Validator; // Keep for type hinting
 
-class UpdatePostRequest extends FormRequest
+class UpdatePostRequest extends PostRequest // Changed inheritance
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     * Allows all users to attempt updating a post in this case.
-     * @return bool
+
+  /**
+     * {@inheritdoc}
+     * authorize() is inherited from PostRequest.
      */
     public function authorize(): bool
     {
-        Log::info('UpdatePostRequest: Authorize check passed.', ['post_id' => $this->route('post')?->id]);
-        return true ;
+        return parent::authorize();
     }
-
     /**
-     * Get the validation rules that apply to the request for updating a post.
-     * Uses 'sometimes' to only validate fields that are present in the request.
-     * Ignores the current post's slug for the unique rule.
+     * Get the specific validation rules for updating an existing post.
      *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
-        $postId = $this->route('post') instanceof Post ? $this->route('post')->id : null ;
-        $postId = $this->route('post') instanceof Post ? $this->route('post')->id : null;
-        if (!$postId && $this->route('post')) {
-             $postId = $this->route('post');
-        }
+        $postId = $this->getPostId();
         return [
-            'title' => 'sometimes|required|string|max:255' ,
+            'title' => ['sometimes', 'required', 'string', 'max:255'],
             'slug'  => [
-                'sometimes' ,
-                'required'  ,
-                'string '   ,
+                'sometimes',
+                'required',
+                'string',
                 'max:255',
-
-                Rule::unique('posts','slug')->ignore($postId),
-                new SlugFormatRule()
+                Rule::unique('posts', 'slug')->ignore($postId), // تجاهل المنشور الحالي
+                new SlugFormatRule(),
             ],
-
-            'body'          => 'sometimes|required|string',
-
-            'is_published'  => 'sometimes|boolean',
-
-            'publish_date'  => [
+            'body' => ['sometimes', 'required', 'string'],
+            'is_published' => ['sometimes', 'boolean'],
+            'publish_date' => [
                 'nullable',
                 'date',
                 new FutureDateRule(),
-                Rule::requiredIf(function () {
-                    return $this->has('is_published') && $this->boolean('is_published');
-                })
+
+                Rule::requiredIf(fn () => $this->has('is_published') && $this->boolean('is_published'))
             ],
-            'meta_description' => 'nullable|string|max:160',
-            'tags'             => 'nullable|string'        ,
-            'keywords'         => [
-                'nullable'  ,
-                'string'    ,
-                new MaxWordsRule(15)]
+            'meta_description' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'tags'             => ['sometimes', 'nullable', 'string'],
+            'keywords' => [
+                'sometimes',
+                'nullable',
+                'string',
+                new MaxWordsRule(15)
+            ]
         ];
     }
-
      /**
-      * Get the custom error messages for validator errors during update.
-     * Provides user-friendly feedback for failed validation rules.
-
-      * @return array{body.required: string, is_published.boolean: string, keywords.string: string, meta_description.max: string, publish_date.date: string, publish_date.required_if: string, slug.max: string, slug.required: string, slug.unique: string, title.max: string, title.required: string}
+      * Get custom messages specific to updating a post or override base messages.
+      *
+      * @return array<string, string>
       */
      public function messages(): array
     {
-        return [
 
-            'title.required' => 'The title field is required.',
-            'title.max'      => 'The title field must not be greater than :max characters.',
-            'slug.unique' => 'This slug (:input) has already been taken. Please choose another one.',
-            'slug.required' => 'The slug field is required.',
-            'slug.max' => 'The slug must not be greater than :max characters.',
-            'body.required' => 'The body field is required.',
-            'is_published.boolean' => 'The is_published field must be true or false.',
-            'publish_date.date' => 'The publish date must be a valid date.',
-            'publish_date.required_if' => 'The publish date is required when the post is marked as published.',
-            'meta_description.max' => 'The meta description must not be greater than :max characters.',
-            'keywords.string' => 'The keywords field must be a string.',
-        ];
+        return array_merge(parent::messages(), [
+
+            'slug.unique' => 'This slug (:input) is already taken by another post. Please choose a different one.',
+
+            'title.required' => 'The title field is required when provided for update.',
+            'slug.required' => 'The slug field is required when provided for update.',
+            'body.required' => 'The content field is required when provided for update.',
+
+        ]);
     }
 
     /**
-     * Get custom attributes for validator errors.
-     * Defines user-friendly names for fields used in validation error messages.
-     *
-     * @return array<string, string>
+     * {@inheritdoc}
+     *attributes() is inherited from PostRequest
      */
     public function attributes(): array
     {
-        return [
-            'title' => 'Title',
-            'slug' => 'Slug',
-            'body' => 'Body',
-            'is_published' => 'Publishing Status',
-            'publish_date' => 'Publish Date',
-            'meta_description' => 'Meta Description',
-            'tags' => 'Tags',
-            'keywords' => 'Keywords',
-        ];
+        return parent::attributes();
     }
 
     /**
-     * Prepare the data for validation before updating.
-     * Cleans tags, handles boolean casting, manages nullable fields,
-     * and auto-generates slug if only title is updated.
-     * @return void
+     * {@inheritdoc}
+     *
      */
     protected function prepareForValidation(): void
     {
-        Log::debug('UpdatePostRequest: Preparing data for validation.', $this->all());
-
-
-        if ($this->filled('tags')) {
-            $cleanedTags = preg_replace('/\s*,\s*/', ',', trim($this->tags));
-            $cleanedTags = preg_replace('/,{2,}/', ',', $cleanedTags);
-            $cleanedTags = trim($cleanedTags, ',');
-            $this->merge([
-                'tags' => $cleanedTags ?: null
-            ]);
-        } else if ($this->has('tags')) {
-             $this->merge(['tags' => null]);
-        }
-
-
-
-        if ($this->has('is_published')) {
-            $this->merge([
-                'is_published' => $this->boolean('is_published')
-            ]);
-
-
-            if (!$this->boolean('is_published')) {
-                 Log::debug('UpdatePostRequest: is_published is false, merging publish_date as null.');
-                 $this->merge(['publish_date' => null]);
-            }
-        }
-         $nullableFields = ['publish_date', 'meta_description', 'keywords'];
-         foreach ($nullableFields as $field) {
-             if ($this->input($field) === '') {
-                 $this->merge([$field => null]);
-             }
-         }
-        if ($this->filled('title') && !$this->filled('slug')) {
-            $this->merge([
-                'slug' => Str::slug($this->input('title'))
-            ]);
-             Log::debug('UpdatePostRequest: Auto-generated slug.', ['slug' => $this->input('slug')]);
-        }
-
-        Log::debug('UpdatePostRequest: Data after preparation.', $this->all());
+        parent::prepareForValidation();
     }
-
     /**
-     *  Handle any tasks that should occur after validation passes for an update.
-     * Logs successful validation attempt with post ID and validated data.
+     * Handle any tasks that should occur after validation passes for updating.
+     *
      * @return void
      */
     protected function passedValidation(): void
     {
-        Log::info('Validation passed for updating post.', [
-
-            'post_id' => $this->route('post') instanceof Post ? $this->route('post')->id : $this->route('post'),
+        Log::info(static::class . ': Validation passed for updating post.', [
+            'post_id' => $this->getPostId(),
             'validated_data' => $this->validated()
         ]);
     }
 
     /**
-     *  Handle a failed validation attempt during update.
-     * Overrides the default behavior to return a custom JSON response with errors
-     * and a 422 status code. Includes the post ID in the log for context.
+     * Get the context for logging failed validation during update attempt.
+     *
      * @param \Illuminate\Contracts\Validation\Validator $validator
-     * @throws \Illuminate\Http\Exceptions\HttpResponseException
-     * @return never
+     * @return array<string, mixed>
      */
-    protected function failedValidation(Validator $validator): void
+    protected function getFailedValidationLogContext(Validator $validator): array
     {
-        Log::warning('UpdatePostRequest: Validation failed.', [
-            'post_id' => $this->route('post')?->id,
-            'errors' => $validator->errors()
-        ]);
+        $context = parent::getFailedValidationLogContext($validator);
+        $context['post_id'] = $this->getPostId();
+        return $context;
+    }
 
-        $response = response()->json([
-            'success' => false,
-            'message' => 'بيانات الإدخال غير صالحة أو غير مكتملة.',
-            'errors' => $validator->errors()
-        ], 422);
+    /**
+     * Get the user-facing message for failed validation during update attempt.
+     *
+     * @return string
+     */
+    protected function getFailedValidationMessage(): string
+    {
+        return 'The input data for updating the post is invalid or incomplete.';
 
-        throw new HttpResponseException($response);
+    }
+
+    // failedValidation() method is inherited from PostRequest
+
+    /**
+     * Helper method to consistently get the post ID from the route.
+     * Handles both route model binding and raw ID parameter.
+     *
+     * @return int|string|null
+     */
+    protected function getPostId(): int|string|null
+    {
+        $post = $this->route('post');
+
+        if ($post instanceof Post) {
+            return $post->id;
+        }
+        if (is_numeric($post) || is_string($post)) {
+             return $post;
+        }
+
+        return null; 
     }
 }
